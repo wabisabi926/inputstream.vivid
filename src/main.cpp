@@ -30,10 +30,14 @@ namespace
 {
 constexpr const char* LOGTAG = "inputstream.vivid";
 
-bool IsSupportedFile(const std::string& path)
+// 只作为日志提示，不作为拒绝条件。
+// 测试阶段必须宽松：用户可能拿 .ts/.mp4/.m2ts 来试，卡在扩展名上会白跑一次。
+bool IsKnownContainer(const std::string& path)
 {
   return UTILS::EndsWith(path, ".mkv") || UTILS::EndsWith(path, ".MKV") ||
-         UTILS::EndsWith(path, ".iso") || UTILS::EndsWith(path, ".ISO");
+         UTILS::EndsWith(path, ".iso") || UTILS::EndsWith(path, ".ISO") ||
+         UTILS::EndsWith(path, ".ts") || UTILS::EndsWith(path, ".m2ts") ||
+         UTILS::EndsWith(path, ".mp4");
 }
 } // namespace
 
@@ -65,16 +69,29 @@ public:
     // 播放时再记一笔：能走到这里说明 Kodi 真的把这个文件交给插件了
     DIAG::Note("Open: %s", path.c_str());
 
-    if (!IsSupportedFile(path))
+    // 只支持本地文件；smb/nfs/http 等协议交给其它插件，这里明确拒绝并留日志，
+    // 避免出现「Open 返回 true 但读不到数据」的假成功。
+    if (path.find("://") != std::string::npos)
     {
-      kodi::Log(ADDON_LOG_INFO, "[%s] unsupported container: %s", LOGTAG, path.c_str());
+      kodi::Log(ADDON_LOG_ERROR, "[%s] 仅支持本地文件，当前 URL: %s", LOGTAG, path.c_str());
+      DIAG::Note("Open 被拒绝：非本地路径 %s", path.c_str());
       return false;
     }
+
+    if (!IsKnownContainer(path))
+      kodi::Log(ADDON_LOG_INFO, "[%s] 未知容器扩展名，仍按字节流尝试: %s", LOGTAG, path.c_str());
 
     struct stat st{};
     if (stat(path.c_str(), &st) != 0)
     {
       kodi::Log(ADDON_LOG_ERROR, "[%s] stat failed: %s", LOGTAG, path.c_str());
+      DIAG::Note("Open 失败：stat 出错 %s", path.c_str());
+      return false;
+    }
+    if (!S_ISREG(st.st_mode))
+    {
+      kodi::Log(ADDON_LOG_ERROR, "[%s] 不是普通文件: %s", LOGTAG, path.c_str());
+      DIAG::Note("Open 失败：不是普通文件 %s", path.c_str());
       return false;
     }
 
@@ -82,6 +99,7 @@ public:
     if (m_fd < 0)
     {
       kodi::Log(ADDON_LOG_ERROR, "[%s] open failed: %s", LOGTAG, path.c_str());
+      DIAG::Note("Open 失败：open 出错 %s", path.c_str());
       return false;
     }
 

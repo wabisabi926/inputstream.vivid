@@ -40,7 +40,7 @@ CoreELEC 专用 HDR Vivid 输入流插件。
   1. 这些符号在真实 `libamcodec.so` 中并不存在，真实导出的是 `codec_init` / `codec_write` / `codec_close` 等 `codec_*` 系列；
   2. amcodec 是零拷贝直显架构，解码结果直接进显示层，不向用户态返回解码帧，无法用「解码后取帧再交给 Kodi」的方式实现。
 
-## 2.0.1 自诊断（不用 SSH 也能定位问题）
+## 2.1.0 自诊断（不用 SSH 也能定位问题）
 
 插件一被 Kodi 加载，就会自动做一次环境诊断，把结果写到：
 
@@ -88,7 +88,7 @@ sh tools/package-addon.sh build dist
 发布：推 `v*` tag 会自动跑构建并把 zip 挂到 GitHub Release。
 
 ```bash
-git tag v2.0.1 && git push origin v2.0.1
+git tag v2.1.0 && git push origin v2.1.0
 ```
 
 ## 安装（CoreELEC）
@@ -96,12 +96,14 @@ git tag v2.0.1 && git push origin v2.0.1
 ```bash
 # 方式一：Kodi 界面 → 设置 → 插件 → 从 zip 文件安装
 # 方式二：SSH（zip 内已有 inputstream.vivid/ 顶层目录，解到 addons 根目录）
-cd /storage/.kodi/addons && unzip -o /storage/inputstream.vivid-2.0.1-linux-aarch64.zip
+cd /storage/.kodi/addons && unzip -o /storage/inputstream.vivid-2.1.0-linux-aarch64.zip
 systemctl restart kodi
 ls -l /storage/inputstream.vivid-diag.txt   # 有这份报告 = 插件已被加载
 ```
 
 ## 实机验证
+
+完整步骤见 [TESTING.md](TESTING.md)（含「如何强制让播放走本插件」这一步，直接播 MKV 是测不到的）。速查：
 
 ```bash
 # 1) 插件是否被加载、是否创建了实例
