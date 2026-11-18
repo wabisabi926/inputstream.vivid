@@ -46,6 +46,8 @@ jobs:
         shell: bash
         run: |
           set -e
+          echo "--- 目标文件（证明源码确实被编译过）---"
+          find build -name "*.o" -exec ls -l {} \;
           SO=$(find build -name "*.so" | head -n1)
           if [ -z "$SO" ]; then echo "FAIL: 没有产出 .so"; exit 1; fi
           echo "artifact: $SO"
@@ -54,6 +56,18 @@ jobs:
           echo "$INFO" | grep -q "ELF64"     || { echo "FAIL: 不是 64 位 ELF"; exit 1; }
           echo "$INFO" | grep -q "AArch64"   || { echo "FAIL: 不是 AArch64"; exit 1; }
           echo "OK: ELF64 / AArch64"
+
+          SIZE=$(stat -c%s "$SO")
+          echo "size: $SIZE bytes"
+          [ "$SIZE" -gt 10000 ] || { echo "FAIL: .so 过小，疑似空壳"; exit 1; }
+          sha256sum "$SO"
+
+          # 必须导出 Kodi 二进制插件的三个入口符号
+          SYMS=$(aarch64-linux-gnu-nm -D --defined-only "$SO")
+          for s in ADDON_Create ADDON_GetTypeVersion ADDON_GetTypeMinVersion; do
+            echo "$SYMS" | grep -qw "$s" || { echo "FAIL: 缺少导出符号 $s"; exit 1; }
+          done
+          echo "OK: 已导出 ADDON_Create / ADDON_GetTypeVersion / ADDON_GetTypeMinVersion"
 
       # 校验 addon.xml 里 Kodi 真正会读的那几个字段
       - name: Verify addon.xml
