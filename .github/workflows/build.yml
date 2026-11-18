@@ -26,10 +26,14 @@ jobs:
           fetch-depth: 1
 
       # 安装 aarch64 交叉编译工具链
+      # ubuntu-latest 自带 cmake/g++，只需补交叉工具链；
+      # 加 Timeout/Retries，避免 apt 镜像抖动导致作业长时间挂住。
       - name: Install Linux Build Tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake g++ pkg-config build-essential gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 || true
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            -o Acquire::Retries=3 -o Acquire::http::Timeout=30 \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
 
       # 配置并编译
       - name: Configure and Build
