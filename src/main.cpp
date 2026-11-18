@@ -24,6 +24,7 @@
 #include <string>
 
 #include "Utils.h"
+#include "Diag.h"
 
 namespace
 {
@@ -60,6 +61,9 @@ public:
     std::string path = props.GetURL();
     if (UTILS::StartsWith(path, "file://"))
       path = path.substr(7);
+
+    // 播放时再记一笔：能走到这里说明 Kodi 真的把这个文件交给插件了
+    DIAG::Note("Open: %s", path.c_str());
 
     if (!IsSupportedFile(path))
     {
@@ -164,6 +168,12 @@ public:
   {
     // 本插件只有 inputstream 一种实例类型，无需再判断 instance 类型。
     kodi::Log(ADDON_LOG_INFO, "[%s] creating inputstream instance", LOGTAG);
+
+    // 一被加载就做一次环境自诊断，报告写到 /storage 下，用户不用 SSH。
+    // 能走到这行，本身就已经证明：.so 架构正确、Kodi 22 愿意加载它。
+    DIAG::RunOnce("CreateInstance");
+    kodi::Log(ADDON_LOG_INFO, "[%s] 诊断报告: %s", LOGTAG, DIAG::ReportPath());
+
     hdl = new CInputStreamVivid(instance);
     return ADDON_STATUS_OK;
   }

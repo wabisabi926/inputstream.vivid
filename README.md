@@ -30,6 +30,20 @@ CoreELEC HDR Vivid 输入流插件。
   1. 这些符号在真实 `libamcodec.so` 中并不存在，真实导出的是 `codec_init` / `codec_write` / `codec_close` 等 `codec_*` 系列；
   2. amcodec 是零拷贝直显架构，解码结果直接进显示层，不向用户态返回解码帧，无法用「解码后取帧再交给 Kodi」的方式实现。
 
+## 2.0.1 自诊断（不用 SSH 也能定位问题）
+
+插件一被 Kodi 加载，就会自动做一次环境诊断，把结果写到：
+
+```
+/storage/inputstream.vivid-diag.txt
+```
+
+同时 `kodi.log` 里会留一行 `自诊断完成，报告: <路径>`。
+
+报告内容包括：构建架构与工具链、`/etc/os-release` 与设备型号、逐个 `dlopen` 候选解码库并打印 `dlsym` 结果（`aml_vid_*` 与真实 `codec_*` 两套对照）、`/proc/self/maps` 里 Kodi 自己已加载的多媒体库、`amhdmitx` 的 HDR/Vivid 能力节点、`/dev` 下的解码节点，最后给出一句结论。
+
+**关键点：能写出这份报告，本身就已经证明 `.so` 架构正确、Kodi 22 愿意加载它。** 如果报告文件不存在，说明插件压根没被加载（看 `kodi.log` 里的 `undefined symbol` / `not loaded`）。
+
 ## 构建
 
 由 GitHub Actions 自动完成（`.github/workflows/build.yml`）：
