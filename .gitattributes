@@ -1,0 +1,8 @@
+# 统一换行，避免 Windows 上检出 CRLF 导致 shell 脚本在设备上执行失败
+* text=auto
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.xml  text eol=lf
+*.cpp  text eol=lf
+*.h    text eol=lf
