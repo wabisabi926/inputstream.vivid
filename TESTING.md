@@ -32,7 +32,7 @@ systemctl restart kodi
 
 > 没启用的话，Kodi 不会选中它，播放会退回内置 demuxer（也不会有诊断报告）。
 
-## 3. 直接播放即可（2.2.0 起）
+## 3. 直接播放即可
 
 插件在 `addon.xml` 里声明了 `extension="mkv|m2ts"`，Kodi 会**自动**把这些容器交给它，不需要 `.strm`、也不需要入库：
 

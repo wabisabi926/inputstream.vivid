@@ -12,7 +12,7 @@ CoreELEC 专用 HDR Vivid 输入流插件。
 
 需要说明的是：**打包格式仍然遵循 Kodi 插件规范**（`addon.xml`、`kodi.inputstream` 扩展点、装到 `/storage/.kodi/addons`）。这不是"写成 Kodi 通用"，而是因为 CoreELEC 的插件系统本身就是 Kodi 的——没有单独的 "CoreELEC 插件格式"。所以"给 CoreELEC 用"和"按 Kodi 插件规范打包"是同一件事，而"能不能装"由架构和平台声明决定。
 
-## Kodi 如何选中本插件（2.2.0 起自动接管 .mkv / .m2ts）
+## Kodi 如何选中本插件（自动接管 .mkv / .m2ts）
 
 Kodi 选择 inputstream 插件只有三条路，全部在 `CDVDFactoryInputStream::CreateInputStream()` → `CInputStreamAddon::Supports()` 里判定：
 
@@ -110,7 +110,7 @@ sh tools/package-addon.sh build dist
 发布：推 `v*` tag 会自动跑构建并把 zip 挂到 GitHub Release。
 
 ```bash
-git tag v2.2.0 && git push origin v2.2.0
+git tag v2.1.0 && git push origin v2.1.0
 ```
 
 ## 安装（CoreELEC）
@@ -118,7 +118,7 @@ git tag v2.2.0 && git push origin v2.2.0
 ```bash
 # 方式一：Kodi 界面 → 设置 → 插件 → 从 zip 文件安装
 # 方式二：SSH（zip 内已有 inputstream.vivid/ 顶层目录，解到 addons 根目录）
-cd /storage/.kodi/addons && unzip -o /storage/inputstream.vivid-2.2.0-linux-aarch64.zip
+cd /storage/.kodi/addons && unzip -o /storage/inputstream.vivid-2.1.0-linux-aarch64.zip
 systemctl restart kodi
 ls -l /storage/inputstream.vivid-diag.txt   # 有这份报告 = 插件已被加载
 ```
