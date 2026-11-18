@@ -41,12 +41,41 @@ jobs:
           cmake --build build --config Release --parallel
 
       # 校验产物架构，防止误产出 32 位或本机架构
+      # 注意：必须硬断言，只打印不断言的话架构错了也会"通过"
       - name: Verify ELF architecture
         shell: bash
         run: |
+          set -e
           SO=$(find build -name "*.so" | head -n1)
+          if [ -z "$SO" ]; then echo "FAIL: 没有产出 .so"; exit 1; fi
           echo "artifact: $SO"
-          aarch64-linux-gnu-readelf -h "$SO" | grep -E "Class|Machine"
+          INFO=$(aarch64-linux-gnu-readelf -h "$SO")
+          echo "$INFO" | grep -E "Class|Machine|Type"
+          echo "$INFO" | grep -q "ELF64"     || { echo "FAIL: 不是 64 位 ELF"; exit 1; }
+          echo "$INFO" | grep -q "AArch64"   || { echo "FAIL: 不是 AArch64"; exit 1; }
+          echo "OK: ELF64 / AArch64"
+
+      # 校验 addon.xml 里 Kodi 真正会读的那几个字段
+      - name: Verify addon.xml
+        shell: bash
+        run: |
+          set -e
+          python3 - <<'EOF'
+          import sys, xml.etree.ElementTree as ET
+          r = ET.parse('addon.xml').getroot()
+          exts = r.findall('extension')
+          isx = [e for e in exts if e.get('point') == 'kodi.inputstream']
+          if not isx:
+              print('FAIL: 没有 point="kodi.inputstream" 的 extension'); sys.exit(1)
+          e = isx[0]
+          if not e.get('library_linux'):
+              print('FAIL: inputstream 扩展缺少 library_linux 属性'); sys.exit(1)
+          # platform 属于 xbmc.addon.metadata 扩展下的子元素
+          plats = [p.text or '' for p in r.iter('platform')]
+          if not any('linux-aarch64' in p for p in plats):
+              print('FAIL: platform 未声明 linux-aarch64，实际为 %r' % plats); sys.exit(1)
+          print('OK: point=kodi.inputstream library_linux=%s platform=%s' % (e.get('library_linux'), plats))
+          EOF
 
       # 打包
       - name: Prepare Artifacts
