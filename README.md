@@ -50,7 +50,7 @@ CoreELEC HDR Vivid 输入流插件。
 
 - 交叉工具链：`aarch64-linux-gnu-gcc/g++`
 - Kodi 源码：`xbmc/xbmc` 分支 `Piers`，取 `xbmc/addons/kodi-dev-kit/include` 作为 SDK 头文件
-- 产物：`inputstream.vivid-linux-aarch64`（含 `addon.xml` 与 `inputstream.vivid.so`）
+- 产物：`inputstream.vivid-<version>-linux-aarch64.zip`，Kodi 可直接安装
 
 本地构建：
 
@@ -60,6 +60,35 @@ cmake -B build -S . -DKODI_SOURCE_DIR=/path/to/xbmc \
   -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
   -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++
 cmake --build build -j
+```
+
+## 打包
+
+```bash
+sh tools/package-addon.sh build dist
+```
+
+产出 `dist/inputstream.vivid-<version>-linux-aarch64.zip` 与同名 `.sha256`。脚本会：
+
+- 从 `addon.xml` 读取 `id` / `version` / `library_linux`，不在脚本里硬编码，避免两处不一致
+- 校验 `.so` 是 ELF、非空，并把文件名改成 `addon.xml` 声明的那个名字
+- 按 Kodi 要求打成**单个顶层目录** `inputstream.vivid/`，内含 `addon.xml` + `.so`（有 `LICENSE` / `resources/` / `icon.png` 会自动带上）
+- 打包后回读 zip 校验结构与版本号，固定时间戳保证同样内容产出同样字节
+
+发布：推 `v*` tag 会自动跑构建并把 zip 挂到 GitHub Release。
+
+```bash
+git tag v2.0.1 && git push origin v2.0.1
+```
+
+## 安装（CoreELEC）
+
+```bash
+# 方式一：Kodi 界面 → 设置 → 插件 → 从 zip 文件安装
+# 方式二：SSH（zip 内已有 inputstream.vivid/ 顶层目录，解到 addons 根目录）
+cd /storage/.kodi/addons && unzip -o /storage/inputstream.vivid-2.0.1-linux-aarch64.zip
+systemctl restart kodi
+ls -l /storage/inputstream.vivid-diag.txt   # 有这份报告 = 插件已被加载
 ```
 
 ## 实机验证

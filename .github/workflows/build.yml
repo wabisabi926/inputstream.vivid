@@ -100,20 +100,43 @@ jobs:
           print('OK: point=kodi.inputstream library_linux=%s platform=%s' % (e.get('library_linux'), plats))
           EOF
 
-      # 打包
-      - name: Prepare Artifacts
+      # 打包成 Kodi 可直接安装的 zip（结构 inputstream.vivid/addon.xml + .so）
+      - name: Package addon zip
         shell: bash
         run: |
-          ADDON_ID="inputstream.vivid"
-          mkdir -p $ADDON_ID
-          cp addon.xml $ADDON_ID/
-          find build -name "*.so" -exec cp {} $ADDON_ID/$ADDON_ID.so \;
-          mkdir -p staging
-          mv $ADDON_ID staging/
+          sh tools/package-addon.sh build dist
+          echo "--- dist ---"
+          ls -l dist
 
-      # 上传
+      # 上传：zip 是给人装的，解压目录方便直接看内容
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: inputstream.vivid-linux-aarch64
-          path: staging/
+          path: dist/
+          if-no-files-found: error
+
+  # 打 tag（v*）时自动把 zip 挂到 GitHub Release，用户可直接下载安装
+  release:
+    name: Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: inputstream.vivid-linux-aarch64
+          path: dist
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/*.sha256
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
