@@ -12,6 +12,28 @@ CoreELEC 专用 HDR Vivid 输入流插件。
 
 需要说明的是：**打包格式仍然遵循 Kodi 插件规范**（`addon.xml`、`kodi.inputstream` 扩展点、装到 `/storage/.kodi/addons`）。这不是"写成 Kodi 通用"，而是因为 CoreELEC 的插件系统本身就是 Kodi 的——没有单独的 "CoreELEC 插件格式"。所以"给 CoreELEC 用"和"按 Kodi 插件规范打包"是同一件事，而"能不能装"由架构和平台声明决定。
 
+## Kodi 如何选中本插件（2.2.0 起自动接管 .mkv / .m2ts）
+
+Kodi 选择 inputstream 插件只有三条路，全部在 `CDVDFactoryInputStream::CreateInputStream()` → `CInputStreamAddon::Supports()` 里判定：
+
+1. 条目属性 `inputstream` 命中插件 ID —— 来自 `.strm` 里的 `#KODIPROP:inputstream=inputstream.vivid`，或视频插件/PVR 主动设置；
+2. 插件声明了匹配的 `protocols`（如 `smb|nfs`）；
+3. **插件声明了匹配的 `extension`**。
+
+本插件用的是第 3 条：
+
+```xml
+<extension point="kodi.inputstream" extension="mkv|m2ts" library_linux="inputstream.vivid.so"/>
+```
+
+所以**启用插件后，本地和网络上的 `.mkv` / `.m2ts` 都会自动经过本插件，不需要 `.strm`、也不需要入库**。这也是为什么 `Open`/`ReadStream` 走 `kodi::vfs::CFile` 而不是 POSIX `open()`——接管是全局的，只支持本地路径会让 SMB/NFS 播放直接失败。
+
+两个刻意保留的限制：
+
+- **不含 `iso`**：ISO 要走 Kodi 的蓝光导航（`CDVDInputStreamNavigator`），被插件接管会丢菜单和章节。
+- **不含 `ts`**：避免把 PVR 录像接管进去，那套有额外的流细节处理。
+- 想恢复原生路径：禁用插件即可；也可以删掉 `extension` 属性重新打包，退化成「只认 `#KODIPROP`」。
+
 ## 当前目标平台
 
 | 项 | 值 |
@@ -30,7 +52,7 @@ CoreELEC 专用 HDR Vivid 输入流插件。
 - 使用 Kodi 22 真实插件接口 `kodi::addon::CInstanceInputStream`
   （旧代码里的 `kodi::inputstream::CInputStream` 在任何 Kodi 版本中都不存在）
 - aarch64 交叉编译，CI 校验产物 ELF Class/Machine
-- MKV / ISO 的字节流读取、Seek、Position、Length
+- MKV / M2TS 的字节流读取、Seek、Position、Length（走 Kodi VFS，本地与 SMB/NFS 通用）
 - 关键路径判空与 `kodi::Log` 日志，避免旧版 `vid_open` 空指针崩溃
 
 尚未实现：
@@ -40,7 +62,7 @@ CoreELEC 专用 HDR Vivid 输入流插件。
   1. 这些符号在真实 `libamcodec.so` 中并不存在，真实导出的是 `codec_init` / `codec_write` / `codec_close` 等 `codec_*` 系列；
   2. amcodec 是零拷贝直显架构，解码结果直接进显示层，不向用户态返回解码帧，无法用「解码后取帧再交给 Kodi」的方式实现。
 
-## 2.1.0 自诊断（不用 SSH 也能定位问题）
+## 自诊断（2.1.0 起，不用 SSH 也能定位问题）
 
 插件一被 Kodi 加载，就会自动做一次环境诊断，把结果写到：
 
@@ -88,7 +110,7 @@ sh tools/package-addon.sh build dist
 发布：推 `v*` tag 会自动跑构建并把 zip 挂到 GitHub Release。
 
 ```bash
-git tag v2.1.0 && git push origin v2.1.0
+git tag v2.2.0 && git push origin v2.2.0
 ```
 
 ## 安装（CoreELEC）
@@ -96,7 +118,7 @@ git tag v2.1.0 && git push origin v2.1.0
 ```bash
 # 方式一：Kodi 界面 → 设置 → 插件 → 从 zip 文件安装
 # 方式二：SSH（zip 内已有 inputstream.vivid/ 顶层目录，解到 addons 根目录）
-cd /storage/.kodi/addons && unzip -o /storage/inputstream.vivid-2.1.0-linux-aarch64.zip
+cd /storage/.kodi/addons && unzip -o /storage/inputstream.vivid-2.2.0-linux-aarch64.zip
 systemctl restart kodi
 ls -l /storage/inputstream.vivid-diag.txt   # 有这份报告 = 插件已被加载
 ```

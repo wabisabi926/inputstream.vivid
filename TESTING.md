@@ -30,11 +30,16 @@ systemctl restart kodi
 
 设置 → 插件 → 我的插件 → 输入流（Inputstream）→ **HDR Vivid 硬件解码器** → 启用。
 
-> 没启用的话，第 4 步的 `.strm` 也会因为找不到插件而直接报错。
+> 没启用的话，Kodi 不会选中它，播放会退回内置 demuxer（也不会有诊断报告）。
 
-## 3. 关键一步：让播放真的走这个插件
+## 3. 直接播放即可（2.2.0 起）
 
-**Kodi 播放本地 MKV 默认用内置 demuxer，根本不经过 inputstream 插件。** 所以直接双击 MKV 什么都测不到，必须用 `.strm` 指定插件：
+插件在 `addon.xml` 里声明了 `extension="mkv|m2ts"`，Kodi 会**自动**把这些容器交给它，不需要 `.strm`、也不需要入库：
+
+- 本地 `.mkv` / `.m2ts`：直接播就行；
+- SMB / NFS / HTTP 上的 `.mkv`：同样会经过插件（插件内部走 Kodi VFS 读取，不是 POSIX 文件句柄）。
+
+如果播了却没有诊断报告，说明插件没被选中，可以用 `.strm` 精确指定单文件来兜底：
 
 ```bash
 cat > /storage/test-vivid.strm <<'EOF'
@@ -43,9 +48,9 @@ cat > /storage/test-vivid.strm <<'EOF'
 EOF
 ```
 
-把第二行换成你片源的真实路径。然后在 Kodi 里：视频 → 文件 → 添加视频源 → 浏览到 `/storage` → 选 `test-vivid.strm` 播放。
+把第二行换成真实路径，然后：视频 → 文件 → 添加视频源 → `/storage` → 选 `test-vivid.strm` 播放。
 
-> 插件只处理本地文件。`smb://` `nfs://` `http://` 会被明确拒绝并在日志里写原因。
+> 副作用要清楚：**启用期间，这台机器上所有 `.mkv` / `.m2ts` 都会经过插件**。不想接管时把插件禁用即可恢复原生路径；`.iso` 没有放进去，是因为 ISO 要走 Kodi 的蓝光导航，被接管会让菜单/章节失效。
 
 ## 4. 确认 L1：插件是否被加载
 

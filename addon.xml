@@ -2,7 +2,7 @@
 <addon
   id="inputstream.vivid"
   name="HDR Vivid 硬件解码器"
-  version="2.1.0"
+  version="2.2.0"
   provider-name="CoreELEC User">
 
   <requires>
@@ -10,11 +10,19 @@
     <import addon="xbmc.core" version="22.0.0"/>
   </requires>
 
-  <extension point="kodi.inputstream" library_linux="inputstream.vivid.so"/>
+  <!-- extension 属性让 Kodi 自动选中本插件：凡是 .mkv / .m2ts 都会经过这里，
+       不需要 .strm 或 KODIPROP。判定逻辑在 Kodi 源码
+       CDVDFactoryInputStream::CreateInputStream -> CInputStreamAddon::Supports()。
+       故意不含 iso：ISO 要走 Kodi 的蓝光导航（CDVDInputStreamNavigator），
+       被插件接管会导致菜单/章节失效。 -->
+  <extension
+    point="kodi.inputstream"
+    extension="mkv|m2ts"
+    library_linux="inputstream.vivid.so"/>
 
   <extension point="xbmc.addon.metadata">
-    <summary lang="zh_CN">CoreELEC 专用：MKV/ISO HDR Vivid 晶晨硬解插件</summary>
-    <description lang="zh_CN">仅适用于 CoreELEC 22.0-Piers（Amlogic-no / aarch64 / Kodi 22），不能安装到 Android、Windows 等其他平台的 Kodi。当前为架构适配验证版：可被 Kodi 22 加载，硬解功能依赖 libamcodec 的真实 API，尚未验证。插件被加载时会自动生成环境诊断报告 inputstream.vivid-diag.txt（位于 /storage），便于定位加载与硬解问题。</description>
+    <summary lang="zh_CN">CoreELEC 专用：MKV/M2TS HDR Vivid 晶晨硬解插件</summary>
+    <description lang="zh_CN">仅适用于 CoreELEC 22.0-Piers（Amlogic-no / aarch64 / Kodi 22），不能安装到 Android、Windows 等其他平台的 Kodi。启用后会自动接管 .mkv / .m2ts 播放（无需 .strm），当前为架构适配验证版：插件只做字节流透传，解封装与解码仍由 Kodi 内置 demuxer + amcodec 完成，尚未实现 HDR Vivid 硬解。插件被加载时会自动生成环境诊断报告 inputstream.vivid-diag.txt（位于 /storage），便于定位加载与硬解问题。</description>
     <platform>linux-aarch64</platform>
     <license>GPL-2.0-or-later</license>
   </extension>

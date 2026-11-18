@@ -93,11 +93,17 @@ jobs:
           e = isx[0]
           if not e.get('library_linux'):
               print('FAIL: inputstream 扩展缺少 library_linux 属性'); sys.exit(1)
+          # extension 属性决定 Kodi 是否自动把 .mkv 交给本插件
+          ext_attr = e.get('extension') or ''
+          ext_list = [x.strip() for x in ext_attr.split('|') if x.strip()]
+          if 'mkv' not in ext_list:
+              print('FAIL: inputstream 扩展未声明 extension 含 mkv，实际为 %r' % ext_attr); sys.exit(1)
           # platform 属于 xbmc.addon.metadata 扩展下的子元素
           plats = [p.text or '' for p in r.iter('platform')]
           if not any('linux-aarch64' in p for p in plats):
               print('FAIL: platform 未声明 linux-aarch64，实际为 %r' % plats); sys.exit(1)
-          print('OK: point=kodi.inputstream library_linux=%s platform=%s' % (e.get('library_linux'), plats))
+          print('OK: point=kodi.inputstream library_linux=%s extension=%s platform=%s'
+                % (e.get('library_linux'), ext_attr, plats))
           EOF
 
       # 打包成 Kodi 可直接安装的 zip（结构 inputstream.vivid/addon.xml + .so）

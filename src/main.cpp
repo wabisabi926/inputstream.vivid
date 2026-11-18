@@ -4,22 +4,24 @@
 //   本文件为「架构适配验证版」，目标是让插件在 CoreELEC 22.0-Piers
 //   (Amlogic-no / aarch64 / Kodi 22) 上能被正确加载、Open/Close/Seek 不崩溃。
 //
-//   当前实现为「字节流透传」：把 MKV/ISO 的原始数据交给 Kodi，
+//   当前实现为「字节流透传」：把 MKV/M2TS 的原始数据交给 Kodi，
 //   由 Kodi 自身的 demuxer + amcodec 播放器完成解封装与硬件解码。
 //   并未自行解码，也不涉及 aml_* 私有接口。
+//
+//   读写统一走 Kodi 的 VFS（kodi::vfs::CFile），因此本地 / SMB / NFS / HTTP
+//   都能透传。这一点很重要：addon.xml 里用 extension="mkv|m2ts" 声明接管
+//   这些容器后，Kodi 会把**所有**这类文件都交给本插件；若只支持本地路径，
+//   网络播放会直接失败。
 //
 //   真正的 HDR Vivid 硬解需要在此基础上接入 CoreELEC/no 上真实可用的解码 API
 //   （见 README 的「后续工作」），不属于本验证版范围。
 
 #include <kodi/addon-instance/Inputstream.h>
+#include <kodi/Filesystem.h>
 
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/stat.h>
+#include <sys/types.h>
 
-#include <cstdio>
 #include <cstdint>
-#include <cstring>
 #include <algorithm>
 #include <string>
 
@@ -30,14 +32,11 @@ namespace
 {
 constexpr const char* LOGTAG = "inputstream.vivid";
 
-// 只作为日志提示，不作为拒绝条件。
-// 测试阶段必须宽松：用户可能拿 .ts/.mp4/.m2ts 来试，卡在扩展名上会白跑一次。
-bool IsKnownContainer(const std::string& path)
+// 与 addon.xml 的 extension 列表保持一致，仅用于日志提示。
+bool IsDeclaredContainer(const std::string& path)
 {
   return UTILS::EndsWith(path, ".mkv") || UTILS::EndsWith(path, ".MKV") ||
-         UTILS::EndsWith(path, ".iso") || UTILS::EndsWith(path, ".ISO") ||
-         UTILS::EndsWith(path, ".ts") || UTILS::EndsWith(path, ".m2ts") ||
-         UTILS::EndsWith(path, ".mp4");
+         UTILS::EndsWith(path, ".m2ts") || UTILS::EndsWith(path, ".M2TS");
 }
 } // namespace
 
@@ -66,114 +65,79 @@ public:
     if (UTILS::StartsWith(path, "file://"))
       path = path.substr(7);
 
-    // 播放时再记一笔：能走到这里说明 Kodi 真的把这个文件交给插件了
+    // 能走到这里说明 Kodi 真的把这个文件交给插件了，记进诊断报告
     DIAG::Note("Open: %s", path.c_str());
 
-    // 只支持本地文件；smb/nfs/http 等协议交给其它插件，这里明确拒绝并留日志，
-    // 避免出现「Open 返回 true 但读不到数据」的假成功。
-    if (path.find("://") != std::string::npos)
+    if (!IsDeclaredContainer(path))
+      kodi::Log(ADDON_LOG_INFO, "[%s] 非声明容器，仍按字节流尝试: %s", LOGTAG, path.c_str());
+
+    // 走 Kodi VFS：本地路径、smb://、nfs://、http(s):// 都能读。
+    // 不能用 POSIX open()：那样网络路径被接管后会直接播放失败。
+    if (!m_file.OpenFile(path))
     {
-      kodi::Log(ADDON_LOG_ERROR, "[%s] 仅支持本地文件，当前 URL: %s", LOGTAG, path.c_str());
-      DIAG::Note("Open 被拒绝：非本地路径 %s", path.c_str());
+      kodi::Log(ADDON_LOG_ERROR, "[%s] VFS OpenFile 失败: %s", LOGTAG, path.c_str());
+      DIAG::Note("Open 失败：VFS 打不开 %s", path.c_str());
       return false;
     }
 
-    if (!IsKnownContainer(path))
-      kodi::Log(ADDON_LOG_INFO, "[%s] 未知容器扩展名，仍按字节流尝试: %s", LOGTAG, path.c_str());
-
-    struct stat st{};
-    if (stat(path.c_str(), &st) != 0)
+    m_length = m_file.GetLength();
+    if (m_length <= 0)
     {
-      kodi::Log(ADDON_LOG_ERROR, "[%s] stat failed: %s", LOGTAG, path.c_str());
-      DIAG::Note("Open 失败：stat 出错 %s", path.c_str());
-      return false;
+      kodi::Log(ADDON_LOG_WARNING, "[%s] 长度未知（可能是流式源）: %s", LOGTAG, path.c_str());
+      DIAG::Note("Open：长度未知 %s", path.c_str());
     }
-    if (!S_ISREG(st.st_mode))
-    {
-      kodi::Log(ADDON_LOG_ERROR, "[%s] 不是普通文件: %s", LOGTAG, path.c_str());
-      DIAG::Note("Open 失败：不是普通文件 %s", path.c_str());
-      return false;
-    }
-
-    m_fd = open(path.c_str(), O_RDONLY);
-    if (m_fd < 0)
-    {
-      kodi::Log(ADDON_LOG_ERROR, "[%s] open failed: %s", LOGTAG, path.c_str());
-      DIAG::Note("Open 失败：open 出错 %s", path.c_str());
-      return false;
-    }
-
-    m_length = static_cast<int64_t>(st.st_size);
-    m_position = 0;
 
     kodi::Log(ADDON_LOG_INFO, "[%s] opened %s (%lld bytes)", LOGTAG, path.c_str(),
               static_cast<long long>(m_length));
+    DIAG::Note("Open 成功：%lld 字节", static_cast<long long>(m_length));
     return true;
   }
 
   void Close() override
   {
-    if (m_fd >= 0)
-    {
-      close(m_fd);
-      m_fd = -1;
-    }
-    m_position = 0;
+    if (m_file.IsOpen())
+      m_file.Close();
     m_length = 0;
   }
 
   int ReadStream(uint8_t* buffer, unsigned int bufferSize) override
   {
-    if (m_fd < 0 || buffer == nullptr || bufferSize == 0)
+    if (!m_file.IsOpen() || buffer == nullptr || bufferSize == 0)
       return -1;
 
-    ssize_t n = pread(m_fd, buffer, bufferSize, m_position);
+    ssize_t n = m_file.Read(buffer, bufferSize);
     if (n < 0)
       return -1;
     if (n == 0)
       return 0;
-
-    m_position += n;
     return static_cast<int>(n);
   }
 
   int64_t SeekStream(int64_t position, int whence = SEEK_SET) override
   {
-    if (m_fd < 0)
+    if (!m_file.IsOpen())
       return -1;
 
-    int64_t base = 0;
-    switch (whence)
-    {
-      case SEEK_SET:
-        base = 0;
-        break;
-      case SEEK_CUR:
-        base = m_position;
-        break;
-      case SEEK_END:
-        base = m_length;
-        break;
-      default:
-        return -1;
-    }
-
-    int64_t target = base + position;
-    target = std::max<int64_t>(0, std::min<int64_t>(target, m_length));
-    m_position = target;
-    return m_position;
+    // CFile::Seek 直接支持 SEEK_SET / SEEK_CUR / SEEK_END；
+    // 长度未知时不要自己算并钳位，交给底层处理。
+    int64_t result = m_file.Seek(position, whence);
+    if (result < 0)
+      return -1;
+    return result;
   }
 
-  int64_t PositionStream() override { return m_position; }
+  int64_t PositionStream() override
+  {
+    return m_file.IsOpen() ? m_file.GetPosition() : 0;
+  }
 
   int64_t LengthStream() override { return m_length; }
 
   bool IsRealTimeStream() override { return false; }
 
 private:
-  int m_fd = -1;
+  kodi::vfs::CFile m_file;
   int64_t m_length = 0;
-  int64_t m_position = 0;
 };
 
 class CAddonVivid : public kodi::addon::CAddonBase
