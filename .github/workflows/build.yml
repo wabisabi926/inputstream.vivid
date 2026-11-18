@@ -73,6 +73,11 @@ jobs:
           done
           echo "OK: 已导出 ADDON_Create / ADDON_GetTypeVersion / ADDON_GetTypeMinVersion"
 
+          # 自诊断模块必须真的被链进 .so（防止 CMake glob 漏掉 Diag.cpp）
+          grep -aq "inputstream.vivid-diag.txt" "$SO" \
+            || { echo "FAIL: .so 里找不到自诊断字符串，Diag.cpp 可能没参与编译"; exit 1; }
+          echo "OK: 自诊断模块已链接进 .so"
+
       # 校验 addon.xml 里 Kodi 真正会读的那几个字段
       - name: Verify addon.xml
         shell: bash
