@@ -1,6 +1,16 @@
 # inputstream.vivid
 
-CoreELEC HDR Vivid 输入流插件。
+CoreELEC 专用 HDR Vivid 输入流插件。
+
+## 适用范围（重要）
+
+**只适用于 CoreELEC（Amlogic-no 系，Linux + aarch64）。** 不能装到 Android、Windows、macOS 版 Kodi 上，也不适用于 x86 LibreELEC：
+
+- 产物是 **Linux aarch64 的 .so**，`addon.xml` 里只声明 `library_linux` + `platform=linux-aarch64`，别的平台 Kodi 直接判定不兼容；
+- 解码路径依赖 Amlogic 的 `libamcodec`，其它平台没有这个库；
+- CoreELEC 之外就算架构碰巧相同（比如 aarch64 的 LibreELEC / 树莓派），也没有 amcodec，插件只能加载、无法硬解。
+
+需要说明的是：**打包格式仍然遵循 Kodi 插件规范**（`addon.xml`、`kodi.inputstream` 扩展点、装到 `/storage/.kodi/addons`）。这不是"写成 Kodi 通用"，而是因为 CoreELEC 的插件系统本身就是 Kodi 的——没有单独的 "CoreELEC 插件格式"。所以"给 CoreELEC 用"和"按 Kodi 插件规范打包"是同一件事，而"能不能装"由架构和平台声明决定。
 
 ## 当前目标平台
 
@@ -106,6 +116,19 @@ nm -D /usr/lib/libamcodec.so 2>/dev/null | grep -E "codec_init|codec_write|aml_v
 ```
 
 播放一个 MKV / ISO，观察日志中出现 `opened ... (N bytes)` 即说明插件链路已通。
+
+## HDR Vivid 在各平台的支持情况
+
+HDR Vivid（菁彩影像，UWA/CUVA 标准）**不是 Kodi 的功能开关**，它要求「芯片解码 → 内核/驱动 → HDMI/EDID」整条链路都支持。Kodi 22 宣传的"HDR 端到端"指的是 HDR10 / HLG 静态元数据，不包含 Vivid 的动态元数据。
+
+| 平台 | Vivid 可能吗 | 说明 |
+|---|---|---|
+| CoreELEC（Amlogic） | 有条件 | 晶晨芯片本身在支持列表内，取决于内核/amcodec 是否把 Vivid 元数据送到 HDMI；这正是本项目要验证的 |
+| Android Kodi | 有条件，但通常退化 | 走 MediaCodec，芯片（海思/联发科/晶晨/高通）支持时理论可行；但 Kodi 自己不解析 Vivid 元数据，多数情况下按 HDR10 输出。国产电视/盒子"原生播放器支持 Vivid" ≠ Kodi 支持 |
+| Windows Kodi | 不行 | D3D11 只处理 HDR10；Windows 系统层面没有 Vivid 通路 |
+| x86 LibreELEC / 树莓派 | 不行 | 无对应硬件与驱动 |
+
+另外，**Vivid 是后向兼容的**：设备不支持时会丢弃动态元数据，按 HDR10 / HLG 正常播放，不会黑屏或花屏。所以"能播、画面正常"并不能证明 Vivid 生效——要确认必须看设备是否进入 Vivid 模式（HDMI 信息、显示器的 HDR 标识、内核日志）。
 
 ## 后续工作
 
