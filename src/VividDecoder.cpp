@@ -1,5 +1,6 @@
 #include "VividDecoder.h"
 #include <cstring>
+#include <cstdio>
 #include <algorithm>
 #include <dlfcn.h>
 #include <chrono>
@@ -35,22 +36,35 @@ CVividDecoder::CVividDecoder() {
     if (!g_aml.inited) {
         // 动态加载晶晨硬件解码库
         g_aml.handle = dlopen("libamcodec.so", RTLD_LAZY);
-        if (g_aml.handle) {
-            // 获取视频解码函数
-            g_aml.vid_new = (void*(*)())dlsym(g_aml.handle, "aml_vid_new");
-            g_aml.vid_open = (bool(*)(void*,int,int,int))dlsym(g_aml.handle, "aml_vid_open");
-            g_aml.vid_decode = (bool(*)(void*,const uint8_t*,size_t,uint64_t,bool))dlsym(g_aml.handle, "aml_vid_decode");
-            g_aml.vid_get = (bool(*)(void*,uint8_t**,size_t*,uint64_t*))dlsym(g_aml.handle, "aml_vid_get");
-            g_aml.vid_close = (void(*)(void*))dlsym(g_aml.handle, "aml_vid_close");
+        if (!g_aml.handle) {
+            // 记录失败原因，便于实机通过 kodi.log 定位（NO 22 上库名/路径可能与 NG 不同）
+            fprintf(stderr, "[inputstream.vivid] dlopen libamcodec.so failed: %s\n", dlerror());
+            return;
+        }
 
-            // 获取音频解码函数
-            g_aml.aud_new = (void*(*)())dlsym(g_aml.handle, "aml_aud_new");
-            g_aml.aud_open = (bool(*)(void*,int,int,int))dlsym(g_aml.handle, "aml_aud_open");
-            g_aml.aud_decode = (bool(*)(void*,const uint8_t*,size_t,uint64_t))dlsym(g_aml.handle, "aml_aud_decode");
-            g_aml.aud_get = (bool(*)(void*,uint8_t**,size_t*,uint64_t*))dlsym(g_aml.handle, "aml_aud_get");
-            g_aml.aud_close = (void(*)(void*))dlsym(g_aml.handle, "aml_aud_close");
+        // 获取视频解码函数
+        g_aml.vid_new = (void*(*)())dlsym(g_aml.handle, "aml_vid_new");
+        g_aml.vid_open = (bool(*)(void*,int,int,int))dlsym(g_aml.handle, "aml_vid_open");
+        g_aml.vid_decode = (bool(*)(void*,const uint8_t*,size_t,uint64_t,bool))dlsym(g_aml.handle, "aml_vid_decode");
+        g_aml.vid_get = (bool(*)(void*,uint8_t**,size_t*,uint64_t*))dlsym(g_aml.handle, "aml_vid_get");
+        g_aml.vid_close = (void(*)(void*))dlsym(g_aml.handle, "aml_vid_close");
 
-            g_aml.inited = true;
+        // 获取音频解码函数
+        g_aml.aud_new = (void*(*)())dlsym(g_aml.handle, "aml_aud_new");
+        g_aml.aud_open = (bool(*)(void*,int,int,int))dlsym(g_aml.handle, "aml_aud_open");
+        g_aml.aud_decode = (bool(*)(void*,const uint8_t*,size_t,uint64_t))dlsym(g_aml.handle, "aml_aud_decode");
+        g_aml.aud_get = (bool(*)(void*,uint8_t**,size_t*,uint64_t*))dlsym(g_aml.handle, "aml_aud_get");
+        g_aml.aud_close = (void(*)(void*))dlsym(g_aml.handle, "aml_aud_close");
+
+        g_aml.inited = true;
+
+        // 关键符号自检：真实 amcodec 导出的是 codec_* 系列，未必有 aml_* 符号。
+        // 缺失时仅告警，不崩溃（后续所有调用均已做判空）。
+        if (!g_aml.vid_new || !g_aml.vid_open || !g_aml.vid_decode || !g_aml.vid_get) {
+            fprintf(stderr, "[inputstream.vivid] WARNING: aml_vid_* symbols missing, video decode unavailable\n");
+        }
+        if (!g_aml.aud_new || !g_aml.aud_open || !g_aml.aud_decode || !g_aml.aud_get) {
+            fprintf(stderr, "[inputstream.vivid] WARNING: aml_aud_* symbols missing, audio decode unavailable\n");
         }
     }
 }
@@ -74,12 +88,14 @@ void CVividDecoder::Reset() {
     if (m_audCtx && g_aml.aud_close)
         g_aml.aud_close(m_audCtx);
 
-    // 创建新解码器并打开
+    // 创建新解码器并打开（必须判空：NO 22 上符号缺失时这些指针可能为 nullptr）
     m_vidCtx = g_aml.vid_new ? g_aml.vid_new() : nullptr;
     m_audCtx = g_aml.aud_new ? g_aml.aud_new() : nullptr;
 
-    g_aml.vid_open(m_vidCtx, m_info.width, m_info.height, m_info.video_codec);
-    g_aml.aud_open(m_audCtx, m_info.sample_rate, m_info.channels, m_info.audio_codec);
+    if (m_vidCtx && g_aml.vid_open)
+        g_aml.vid_open(m_vidCtx, m_info.width, m_info.height, m_info.video_codec);
+    if (m_audCtx && g_aml.aud_open)
+        g_aml.aud_open(m_audCtx, m_info.sample_rate, m_info.channels, m_info.audio_codec);
 }
 
 // 打开文件（仅初始化，不实际打开文件句柄）

@@ -6,13 +6,28 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# 修复晶晨硬解编译报错
+# 关闭严格告警（晶晨头文件与 Kodi SDK 混编时噪声较多）
 add_compile_options(-fpermissive -w)
 
 # ==============================================
-# 🔥 日志定位的终极修复：Kodi 21 正确头文件路径
+# Kodi addon SDK 头文件路径
+# Kodi 21 Omega / 22 Piers 均为 xbmc/addons/kodi-dev-kit/include。
+# 这里做多候选探测，兼容不同分支/打包方式的命名差异。
 # ==============================================
-include_directories(${KODI_SOURCE_DIR}/xbmc/addons/kodi-addon-kit/include)
+if(NOT KODI_SOURCE_DIR)
+  message(FATAL_ERROR "KODI_SOURCE_DIR 未设置，请用 -DKODI_SOURCE_DIR=<kodi_src> 指定 Kodi 源码目录")
+endif()
+
+foreach(_kit
+    ${KODI_SOURCE_DIR}/xbmc/addons/kodi-dev-kit/include
+    ${KODI_SOURCE_DIR}/xbmc/addons/kodi-addon-dev-kit/include
+    ${KODI_SOURCE_DIR}/xbmc/addons/kodi-addon-kit/include)
+  if(EXISTS ${_kit})
+    include_directories(${_kit})
+    message(STATUS "[inputstream.vivid] Kodi SDK: ${_kit}")
+  endif()
+endforeach()
+
 include_directories(src)
 
 # 自动搜索源码

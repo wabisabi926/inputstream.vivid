@@ -1,37 +1,37 @@
 name: Build InputStream Vivid
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
   build:
-    name: Build Linux-armv7
+    name: Build Linux-aarch64
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: linux
-            arch: armv7
-            cmake-args: -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=arm -DCMAKE_C_COMPILER=arm-linux-gnueabihf-gcc -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++
+            arch: aarch64
+            cmake-args: -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++
 
     steps:
       - uses: actions/checkout@v4
 
-      # 下载Kodi 21源码（和你模板完全一致）
+      # 下载 Kodi 22 Piers 源码（提供 kodi-dev-kit 头文件）
       - name: Checkout Kodi Source
         uses: actions/checkout@v4
         with:
           repository: xbmc/xbmc
-          ref: Omega
+          ref: Piers
           path: kodi_src
           fetch-depth: 1
 
-      # 安装编译工具
+      # 安装 aarch64 交叉编译工具链
       - name: Install Linux Build Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ pkg-config build-essential gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+          sudo apt-get install -y cmake g++ pkg-config build-essential gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
-      # 编译（模板原生命令）
+      # 配置并编译
       - name: Configure and Build
         shell: bash
         run: |
@@ -39,6 +39,14 @@ jobs:
             -DKODI_SOURCE_DIR=${{ github.workspace }}/kodi_src \
             ${{ matrix.cmake-args }}
           cmake --build build --config Release --parallel
+
+      # 校验产物架构，防止误产出 32 位或本机架构
+      - name: Verify ELF architecture
+        shell: bash
+        run: |
+          SO=$(find build -name "*.so" | head -n1)
+          echo "artifact: $SO"
+          aarch64-linux-gnu-readelf -h "$SO" | grep -E "Class|Machine"
 
       # 打包
       - name: Prepare Artifacts
@@ -51,9 +59,9 @@ jobs:
           mkdir -p staging
           mv $ADDON_ID staging/
 
-      # 上传（固定名称，无任何变量）
+      # 上传
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: inputstream.vivid-linux-armv7
+          name: inputstream.vivid-linux-aarch64
           path: staging/
